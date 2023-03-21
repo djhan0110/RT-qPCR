@@ -1,0 +1,92 @@
+rm(list = ls())
+setwd("C:/Workspace/R/qRT-PCR/SCP_validation")
+
+# Call packages
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(readxl)
+library(janitor)
+library(scales)
+library(rstatix)
+library(ggprism)
+library(stringr)
+
+# Import data
+rawdata <- read_excel("Rawdata/SCP.xlsx")
+head(rawdata)
+
+df1 <- as.data.frame(rawdata)
+df1 <- clean_names(df1)
+
+df1$cell_lines = str_replace_all(df1$cell_lines, "SK-3B iNF2", "SiN")
+df1$cell_lines = str_replace_all(df1$cell_lines, "H11 iNF2", "HiN")
+df1$cell_lines <- factor(df1$cell_lines, levels = c("Wi","SiN", "HiN"))
+df1$type <- factor(df1$type, levels = c("iPSC","SCP"))
+df1$target <- factor(df1$target, levels = c("CDH19","GAP43", "MPZ", "NGFR", "SOX10", "OCT4"))
+
+head(df1)
+
+c.code  <- c("#f38e62", "#74ac71", "#587db6")
+
+# Data summary
+df1.sum <- df1 %>%
+  group_by(cell_lines, type, target) %>% 
+  summarise(n = n(), mean = mean(fc), sd = sd(fc))
+  # mutate(se = sd/sqrt(n)) %>%
+  # mutate(ic = se*qt((1-0.05)/2+0.5, n-1))
+
+head(df1.sum)
+
+df1.stat <- df1 %>% 
+  group_by(cell_lines, target) %>% 
+  t_test(fc ~ type) %>% 
+  add_significance() %>% 
+  add_xy_position(fun = "mean_sd", x = "cell_lines", scales = "free_y")
+head(df1.stat)
+
+# Plot
+df1.p1 <- "Reset"
+
+df1.p1 <- ggplot(df1.sum, aes(x = cell_lines, y = mean)) +
+  geom_col(aes(fill = type), position = position_dodge(0.9), size = 1, color = "black") +
+  geom_errorbar(aes(group = type, ymin = mean - sd, ymax = mean + sd), size = 1, width = 0.5, position = position_dodge(0.9)) +
+  #, size = 2, width = 0.3, position = position_dodge(0.65)) +
+  geom_point(data = df1, aes(x = cell_lines, y = fc, shape = type),
+              position = position_jitterdodge(), 
+              color = "black", size = 3, alpha = 0.75) +
+
+  stat_pvalue_manual(df1.stat, hide.ns = T, size = 8, tip.length = 0, remove.bracket = T, vjust = 0.2) +
+
+  scale_fill_manual(values = c("iPSC" = "#e9a3c9", "SCP" = "#a1d76a")) +
+  
+  scale_y_continuous(expand = expansion(mult = c(0, 0.3))) +
+  
+  facet_wrap(~ target, scales = "free", ncol = 6) +
+  
+  theme_classic(base_size = 0, base_line_size = 1.5) +
+  theme(text = element_text(color = "black", size = 12, face = "bold"),
+        title = element_blank(),
+        
+        axis.title.y = element_text(size = 30, margin = margin(t = 0, b = 0, l = 0, r = 5)),
+        
+        axis.ticks.length = unit(0.2, "cm"),
+        
+        axis.text = element_text(color = "black", size = 14, face = "bold"),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+
+        legend.margin = margin(5, 0, 0, 0),
+        legend.position = c(0.965, 0.95),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12, face = "bold"),
+        
+        panel.spacing = unit(0.1, "cm"),
+        
+        strip.background = element_rect(color = "white"),
+        strip.text.x = element_text(size = 20, margin = margin(10, 0, 10, 0), face = "bold.italic")) +
+  
+  labs(title = "", x = "", y = "FC") 
+
+df1.p1
+
+#1400x400
